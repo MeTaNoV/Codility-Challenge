@@ -1,165 +1,225 @@
 
-var buildNodes = function (A, B, N, nodes) {
+var buildNodes = function (A, B, N) {
+    var nodes = new Array(N + 1);
     for (var i = 0; i < N; i++) {
 		var node;
 		if ( !nodes[A[i]] ) {
 			node = {};
 			node.idx = A[i];
-			node.connections = [];
+			node.connections = 0;
+			node.connectedNodes = [];
 			nodes[A[i]] = node;
 		}
 		if ( !nodes[B[i]] ) {
 			node = {};
 			node.idx = B[i];
-			node.connections = [];
+			node.connections = 0;
+			node.connectedNodes = [];
 			nodes[B[i]] = node;
 		}
-		nodes[A[i]].connections.push( { road: i, node: nodes[B[i]]} );
-		nodes[B[i]].connections.push( { road: i, node: nodes[A[i]]} );
+		nodes[A[i]].connectedNodes.push( nodes[B[i]] );
+		nodes[A[i]].connections++;
+		nodes[B[i]].connectedNodes.push( nodes[A[i]] );
+		nodes[B[i]].connections++;
     }
+    return nodes;
 };
 
-var printNodes = function (nodes) {
-	for (var i = 0; i < nodes.length; i++) {
-		var node = nodes[i];
-		var s = "";
-		for (var j = 0; j < node.connections.length; j++) {
-			s += node.connections[j].node.idx;
-		};
-		console.log("Node " + node.idx + ": " + s);
-	}
-}
-
-var buildRoads = function (roads) {
-    for (var i = 0; i < roads.length; i++) {
-    	var road = {};
-    	road.idx = i;
-    	road.count = 0;
-    	road.isSuppressed = false;
-    	roads[i] = road;
-	}
-};
-
-var initPath = function (path) {
-    for (var i = 0; i < path.length; i++) {
-    	path[i] = 0;
-	}
-};
-
-var computeAllPaths = function (nodes, roads, paths) {
-	var path = new Array(roads.length);
-	initPath(path);
-	for (var i = 0; i < nodes.length; i++) {
-		var node = nodes[i];
-		//console.log("Node " + node.idx);
-		for ( var j = 0; j < node.connections.length; j++) {
-			var newPath = path.slice();
-			//console.log("Following road: " + node.connections[j].road);
-			computePath(roads, paths, newPath, 0, node.connections[j]);
-		}
-		nodes[i].isDone = true;
-	}
-};
-
-var computePath = function (roads, paths, path, step, conn) {
-	if ( path[conn.road] > 0 ) {
-		//console.log("Been there... " + conn.road);
-		return;
-	}
-	step++;
-	path[conn.road] = step;
-	var node = conn.node;
-
-	//console.log("Node " + node.idx);
-
-	if ( !node.isDone ) {
-		path.forEach( function(elt, i) {
-		    if ( elt > 0) {
-		        roads[i].count++;
-		    }
-		});
-		//console.log("Adding path: " + path);			
-		paths.push({length: step, path: path});		
-	} else {
-		//console.log("doublon: " + conn.node.idx);
-	}
-
-	for (var i = 0; i < node.connections.length; i++) {
-		var newPath = path.slice();
-		//console.log("Following road: " + node.connections[i].road + " to node " + node.connections[i].node.idx);
-		computePath(roads, paths, newPath, step, node.connections[i]);		
-	}
-};
-
-var chooseRoad = function (roads) {
-	return roads.reduce( function (prev, current) {
-		if ( !prev && !current.isSuppressed) {
-			return current;
-		}
-		if (!current.isSuppressed && current.count > prev.count) {
-			return current;
+var sortNodes = function (nodes) {
+	nodes.sort( function (a, b) {
+		if (a.connectedNodes.length !== b.connectedNodes.length) {
+			return a.connectedNodes.length - b.connectedNodes.length;
 		} else {
-			return prev;
+			return a.idx - b.idx;
 		}
-	}, null);
+	});
 };
 
-var suppressPathsWithRoad = function (paths, road, roads) {
-	return paths.filter( function (elt) {
-		if ( elt.path[road.idx] > 0 ) {
-			elt.path.forEach( function(e, i) {
-			    if ( e > 0 ) {
-			        roads[i].count--;
-			    }
+var reduceNodes = function (nodes) {
+	var s = 0;
+	nodes.forEach( function (node) {
+		if (node.connections > 2) {
+			var count = 0;
+			node.connectedNodes.forEach( function (connectedNode, i, connectedNodes) {
+				if (connectedNode.connections === 1) {
+					if ( count !== 0 ) {
+						console.log("Suppressing node " + connectedNode.idx);
+						connectedNode.suppressed = true;
+						node.connections--;
+						s++;
+					}
+					count++;
+				}
 			});
-			return false;
-		} else {
-			return true;
 		}
 	});
+	return s;
 };
 
-var printRoads = function (roads) {
-	roads.forEach( function (road) {
-		console.log("Road " + road.idx + ": " + road.count);
+var longestPath = function (nodes) {
+	// let's compute all leaf to leaf distance
+	var max = 0;
+	var queue = [];
+	nodes.forEach( function (node) {
+		if (node.connections !== 1 || node.suppressed) {
+			return;
+		}
+		node.distance = 0;
+		queue.push(node);
+		while ( queue.length !== 0 ) {
+			var cur = queue.shift();
+			cur.connectedNodes.forEach( function (connectedNode) {
+				if (!connectedNode.distance) {
+					connectedNode.distance = cur.distance + 1;
+					queue.push(connectedNode);
+				}
+			});
+		}
+		nodes.forEach( function(n) {
+			max = Math.max(max, n.distance);
+			delete n.distance;
+		});		
 	});
-}
+	return max;
+};
+
+var checkLongestPath = function (nodes, nodeCount, distance, cameras) {
+	var found = false;
+	var currentCount = 0;
+	var queue = [];
+	console.log("Trying to find a distance of "+distance);
+	nodes.forEach( function(n) {
+		n.conn = n.connections;
+	});
+	nodes.forEach( function (node) {
+		if (node.suppressed || node.conn > 1 || found || cameras < 0) {
+			return;
+		}
+		node.distance = 0;
+		currentCount++;
+		queue.push(node);
+		while ( queue.length !== 0 ) {
+			var cur = queue.shift();
+			console.log("Visiting node "+cur.idx);
+			cur.visited = true;
+			if (cur.conn < 3) {
+				// we are on a direct line
+				cur.connectedNodes.forEach( function (connectedNode) {
+					if (!connectedNode.suppressed && !connectedNode.visited && !connectedNode.distance) {
+						connectedNode.distance = cur.distance + 1;
+						currentCount++;
+						if (connectedNode.distance !== distance) {
+							// let's push it further
+							queue.push(connectedNode);
+						} else {
+							// let's suppress a connection to its neighbours
+							console.log("Maximum distance reached on node " + connectedNode.idx);
+							connectedNode.connectedNodes.forEach( function (connectedNode) {
+								if (!connectedNode.suppressed && !connectedNode.visited) {
+									console.log("Suppressing connection to node "+connectedNode.idx);
+									connectedNode.conn--;
+									cameras--;
+								}
+							});
+						}
+					}
+				});				
+			} else {
+				var count = 0;
+				var chosen = false;
+				// we need to take care of the crossing
+				cur.connectedNodes.forEach( function (connectedNode) {
+					if (!connectedNode.suppressed && !connectedNode.visited && !connectedNode.distance) {
+						if (!chosen && (connectedNode.conn === 1 || 
+							            (count+1) === connectedNode.conn)) {
+							chosen = true;
+							connectedNode.distance = cur.distance + 1;
+							currentCount++;
+							if (connectedNode.distance !== distance) {
+								// let's push it further
+								queue.push(connectedNode);
+							} else {
+								// let's suppress a connection to its neighbours
+								console.log("Maximum distance reached on node " + connectedNode.idx);
+								connectedNode.connectedNodes.forEach( function (connectedNode) {
+									if (!connectedNode.suppressed && !connectedNode.visited) {
+										console.log("Suppressing connection to node "+connectedNode.idx);
+										connectedNode.conn--;
+										cameras--;
+									}
+								});
+							}
+						} else {
+							// let's suppress a connection to its neighbours
+							connectedNode.connectedNodes.forEach( function (connectedNode) {
+								if (!connectedNode.suppressed && !connectedNode.visited) {
+									console.log("Suppressing connection to node "+connectedNode.idx);
+									connectedNode.conn--;
+									cameras--;
+								}
+							});
+						}
+					} else {
+						count++;
+					}
+				});				
+			}
+		}
+		console.log("currentCount: "+currentCount);
+		if (currentCount === nodeCount) {
+			found = true;
+		}
+	});
+	if (!found) {
+		nodes.forEach( function(n) {
+			delete n.distance;
+			delete n.conn;
+			delete n.visited;
+		});
+	}
+	return found;
+};
 
 function solution(A, B, K) {
     // write your code in JavaScript (Node.js 0.12)
     var N = A.length;
-    var nodes = new Array(N + 1);
-    var roads = new Array(N);
-    var paths = [];
-    
-    buildNodes(A, B, N, nodes);
+    var nodes = buildNodes(A, B, N);
+    sortNodes(nodes);
     //printNodes(nodes);
-    buildRoads(roads);
+    var L = longestPath(nodes);
+    console.log("L="+L);
+    var S = reduceNodes(nodes);
+    console.log("S="+S);
+    var min = Math.ceil( (L-K) / (K+1) );
+    console.log("min="+min);
 
-	computeAllPaths(nodes, roads, paths);
-    
-    for (var i = 0; i < K; i++) {
-    	//printRoads(roads);
-    	var road = chooseRoad(roads);
-    	//console.log("Suppressing road:" + road.idx);
-    	paths = suppressPathsWithRoad(paths, road, roads);
-    	roads[road.idx].isSuppressed = true;
-    }
-    
-    // paths.forEach( function (path) {
-    // 	if ( path ) {
-    // 		console.log(path);
-    // 	}
-    // });
-
-    var result = paths.reduce( function (prev, current) {
-    	if (current && current.length > prev) {
-    		return current.length;
+    var result = min;
+    var found = false;
+    while ( !found ) {
+    	if (result === 1) {
+	    	found = checkLongestPath(nodes, N+1-S, result, K-S);    		
     	} else {
-    		return prev;
+	    	found = checkLongestPath(nodes, N+1-S, result, K);    		
     	}
-    }, 0);
-    //console.log("And the result is: " + result);
+    	if (!found) {
+	    	result++;
+    	}
+    }
 
     return result;
 }
+
+var printNodes = function (nodes) {
+	nodes.forEach( function (node) {
+		var str = "";
+		node.connectedNodes.forEach( function (connectedNode) {
+			str += connectedNode.node.idx + " ";
+		});
+		console.log("Node " + node.idx + ": " + node.connectedNodes.length + " -> " + str);
+	});
+};
+
+var printABK = function (A, B, K) {
+	console.log("([" + A + "],[" + B + "]," + K + ")");
+};
+
