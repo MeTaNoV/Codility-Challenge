@@ -93,6 +93,7 @@ var checkLongestPath = function (nodes, nodeCount, distance, cameras) {
 	});
 	nodes.forEach( function (node) {
 		if (node.suppressed || node.conn > 1 || found || cameras < 0) {
+		    console.log("Skipping node " + node.idx + "(" +node.suppressed+ "," +node.conn+ "," +found+ "," +cameras+ ")");
 			return;
 		}
 		node.distance = 0;
@@ -113,6 +114,7 @@ var checkLongestPath = function (nodes, nodeCount, distance, cameras) {
 							queue.push(connectedNode);
 						} else {
 							// let's suppress a connection to its neighbours
+							connectedNode.visited = true;
 							console.log("Maximum distance reached on node " + connectedNode.idx);
 							connectedNode.connectedNodes.forEach( function (connectedNode) {
 								if (!connectedNode.suppressed && !connectedNode.visited) {
@@ -140,6 +142,7 @@ var checkLongestPath = function (nodes, nodeCount, distance, cameras) {
 								queue.push(connectedNode);
 							} else {
 								// let's suppress a connection to its neighbours
+								connectedNode.visited = true;
 								console.log("Maximum distance reached on node " + connectedNode.idx);
 								connectedNode.connectedNodes.forEach( function (connectedNode) {
 									if (!connectedNode.suppressed && !connectedNode.visited) {
@@ -222,4 +225,3 @@ var printNodes = function (nodes) {
 var printABK = function (A, B, K) {
 	console.log("([" + A + "],[" + B + "]," + K + ")");
 };
-
